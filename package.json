@@ -1,0 +1,21 @@
+{
+  "name": "hackz-alo",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
+    "expo": "~54.0.35",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-dotenv": "^3.4.11",
+    "react-native-url-polyfill": "^3.0.0"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "private": true
+}
