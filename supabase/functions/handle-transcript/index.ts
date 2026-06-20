@@ -3,8 +3,8 @@
 // 実行環境: Deno(Supabase Edge Functions)
 // 役割:
 //  1. Deepgramの確定テキストを受け取る
-//  2. 「うん」を含むかどうかを判定し、含む場合はeventsテーブルに記録する
-//     (単語中に含まれる場合も対象とするため、単純な部分文字列一致を使用)
+//  2. 「うん」(音読み「ウン」となる「運」「雲」を含む単語も含む)を
+//     含むかどうかを判定し、含む場合はeventsテーブルに記録する
 //  3. ユーザー発言をmessagesテーブルに保存する
 //  4. 会話の性格(system)と履歴を取得し、ChatGPT(OpenAI API)に送信する
 //  5. アシスタントの返答をmessagesテーブルに保存し、クライアントに返す
@@ -17,8 +17,21 @@ interface RequestBody {
   rawTranscript?: string;
 }
 
+const KANJI = '\\u4E00-\\u9FFF';
+
 function containsUn(transcript: string): boolean {
-  return transcript.includes('うん');
+  // ひらがな表記の「うん」（あいづち・フィラーなど）
+  if (transcript.includes('うん')) return true;
+
+  // 「運」は送り仮名が「ぶ/び/べ/ぼ/ん」(=訓読み「はこぶ」系の活用)でない限り
+  // 音読み「ウン」(運動・運送・運転・「運がいい」等)になるため検出対象とする
+  if (/運(?![ぶびべぼん])/.test(transcript)) return true;
+
+  // 「雲」は単独では訓読み「くも」だが、他の漢字と複合すると
+  // 音読み「ウン」になる(雲海・暗雲・戦雲など)ため、漢字に隣接する場合のみ対象とする
+  if (new RegExp(`[${KANJI}]雲|雲[${KANJI}]`).test(transcript)) return true;
+
+  return false;
 }
 
 const corsHeaders = {
@@ -149,7 +162,7 @@ Deno.serve(async (req: Request) => {
   }
 
   console.log(`${TAG} 11. 正常終了`);
-  return new Response(JSON.stringify({ assistantReply }), {
+  return new Response(JSON.stringify({ assistantReply, unDetected }), {
     headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
 });

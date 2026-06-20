@@ -22,7 +22,8 @@ async function extractFunctionError(label: string, error: unknown): Promise<stri
 
 export function useConversation(
   onAssistantReply?: (reply: string) => void,
-  onUserTranscript?: (transcript: string) => void,
+  onUserTranscript?: (transcript: string, id: string) => void,
+  onUnDetected?: (id: string) => void,
 ) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
@@ -34,7 +35,8 @@ export function useConversation(
     rawTranscript: string,
   ) => {
     console.log('[useConversation] 文字起こし確定:', transcript);
-    onUserTranscript?.(transcript);
+    const userMsgId = Date.now().toString() + '_u';
+    onUserTranscript?.(transcript, userMsgId);
     const { data, error } = await supabase.functions.invoke<TranscriptHandleResponse>(
       'handle-transcript',
       { body: { conversationId: convId, transcript, rawTranscript } },
@@ -43,9 +45,12 @@ export function useConversation(
       const detail = await extractFunctionError('handle-transcript', error);
       setCallError(detail);
     } else if (data?.assistantReply) {
+      if (data.unDetected) {
+        onUnDetected?.(userMsgId);
+      }
       onAssistantReply?.(data.assistantReply);
     }
-  }, [onAssistantReply, onUserTranscript]);
+  }, [onAssistantReply, onUserTranscript, onUnDetected]);
 
   const startConversation = useCallback(async () => {
     setCallError(null);
