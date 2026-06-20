@@ -12,7 +12,10 @@ export interface Message {
 
 export interface ConversationStartResponse {
   conversationId: string;
-  deepgramAccessToken: string;
+}
+
+export interface TranscribeResponse {
+  transcript: string;
 }
 
 export interface TranscriptHandleResponse {
