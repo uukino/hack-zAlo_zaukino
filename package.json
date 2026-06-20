@@ -6,6 +6,7 @@
     "@deepgram/sdk": "^5.4.0",
     "@supabase/supabase-js": "^2.108.2",
     "expo": "~54.0.35",
+    "expo-dev-client": "~6.0.21",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5",
