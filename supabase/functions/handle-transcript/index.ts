@@ -31,6 +31,12 @@ Deno.serve(async (req: Request) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  const authToken = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
+  const { data: { user } } = await supabase.auth.getUser(authToken);
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
   const { conversationId, transcript }: RequestBody = await req.json();
 
   if (!conversationId || !transcript) {
@@ -59,6 +65,7 @@ Deno.serve(async (req: Request) => {
     .from('conversations')
     .select('personality')
     .eq('id', conversationId)
+    .eq('user_id', user.id)
     .single();
 
   if (convError || !conversation) {
