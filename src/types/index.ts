@@ -1,0 +1,20 @@
+// src/types/index.ts
+
+export type MessageRole = 'system' | 'user' | 'assistant';
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationStartResponse {
+  conversationId: string;
+  deepgramAccessToken: string;
+}
+
+export interface TranscriptHandleResponse {
+  assistantReply: string;
+}
