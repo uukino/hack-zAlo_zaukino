@@ -63,6 +63,25 @@ export default function App() {
     addMessage(makeSystemMsg('── 会話を終了しました ──'));
   }, [_stop, addMessage]);
 
+  const handleLogout = useCallback(async () => {
+    _stop();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user_id', user.id);
+      if (convs && convs.length > 0) {
+        const ids = convs.map((c: { id: string }) => c.id);
+        await supabase.from('events').delete().in('conversation_id', ids);
+        await supabase.from('messages').delete().in('conversation_id', ids);
+        await supabase.from('conversations').delete().in('id', ids);
+      }
+    }
+    setMessages([]);
+    await supabase.auth.signOut();
+  }, [_stop]);
+
 
   // 新メッセージが来たら末尾へスクロール
   useEffect(() => {
@@ -85,7 +104,7 @@ export default function App() {
         {/* ヘッダー */}
         <View style={styles.header}>
           <Text style={styles.title}>AI会話</Text>
-          <Button title="ログアウト" onPress={() => supabase.auth.signOut()} />
+          <Button title="ログアウト" onPress={handleLogout} />
         </View>
 
         {/* メッセージ一覧 */}
