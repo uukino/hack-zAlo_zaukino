@@ -16,11 +16,6 @@ interface RequestBody {
   transcript: string;
 }
 
-interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
 function containsUn(transcript: string): boolean {
   return transcript.includes('うん');
 }
@@ -111,34 +106,34 @@ Deno.serve(async (req: Request) => {
   }
   console.log(`${TAG} 7. messages SELECT 成功: ${history.length} 件`);
 
-  const chatMessages: ChatMessage[] = [
+  const groqMessages = [
     { role: 'system', content: conversation.personality },
-    ...history.map((m) => ({ role: m.role as ChatMessage['role'], content: m.content })),
+    ...history.map((m) => ({ role: m.role, content: m.content })),
   ];
 
-  console.log(`${TAG} 8. OpenAI API 呼び出し開始: メッセージ数=${chatMessages.length}`);
-  const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+  console.log(`${TAG} 8. Groq API 呼び出し開始: メッセージ数=${groqMessages.length}`);
+  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${Deno.env.get('GROQ_API_KEY')}`,
+      'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: chatMessages,
+      model: 'llama-3.1-8b-instant',
+      messages: groqMessages,
     }),
   });
 
-  console.log(`${TAG} 8. OpenAI API レスポンス: status=${openaiRes.status}`);
-  if (!openaiRes.ok) {
-    const body = await openaiRes.text();
-    console.error(`${TAG} 8. OpenAI API 失敗: status=${openaiRes.status} body=${body}`);
-    return new Response('ChatGPT呼び出しに失敗しました', { status: 502 });
+  console.log(`${TAG} 8. Groq API レスポンス: status=${groqRes.status}`);
+  if (!groqRes.ok) {
+    const body = await groqRes.text();
+    console.error(`${TAG} 8. Groq API 失敗: status=${groqRes.status} body=${body}`);
+    return new Response(`Groq呼び出しに失敗しました: ${groqRes.status} ${body}`, { status: 502 });
   }
 
-  const completion = await openaiRes.json();
-  const assistantReply: string = completion.choices[0].message.content;
-  console.log(`${TAG} 9. OpenAI 返答取得: "${assistantReply.slice(0, 30)}..."`);
+  const groqData = await groqRes.json();
+  const assistantReply: string = groqData.choices[0].message.content;
+  console.log(`${TAG} 9. Groq 返答取得: "${assistantReply.slice(0, 30)}..."`);
 
   const { error: replyError } = await supabase.from('messages').insert({
     conversation_id: conversationId,
