@@ -9,12 +9,19 @@ const AUDIO_CONFIG = {
   audioSource: 6, // Android: VOICE_RECOGNITION
 };
 
-// 約1秒分(16000 samples * 2 bytes = 32000 bytes)溜まったら送信する
-const FLUSH_BYTES = 32000;
+// 無音判定の閾値（16bit PCM の RMS）。環境ノイズに応じて調整
+const SILENCE_THRESHOLD = 500;
+// 無音がこの時間続いたら発話終了とみなす
+const SILENCE_DELAY_MS = 800;
+// バッファの上限（約5秒）。無音を検出できなかった場合のフォールバック
+const MAX_BUFFER_BYTES = 160000;
 
 let subscription: EmitterSubscription | null = null;
 let audioBuffer: number[] = [];
 let muted = false;
+let hasSpeech = false;
+let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+let flushCallback: ((chunk: ArrayBuffer) => void) | null = null;
 
 export function muteAudio(): void {
   muted = true;
@@ -24,6 +31,28 @@ export function muteAudio(): void {
 export function unmuteAudio(): void {
   muted = false;
   audioBuffer = [];
+}
+
+function computeRMS(bytes: number[]): number {
+  let sum = 0;
+  const samples = Math.floor(bytes.length / 2);
+  for (let i = 0; i < samples * 2; i += 2) {
+    let sample = (bytes[i + 1] << 8) | bytes[i];
+    if (sample > 0x7FFF) sample -= 0x10000;
+    sum += sample * sample;
+  }
+  return Math.sqrt(sum / samples);
+}
+
+function flush(): void {
+  if (audioBuffer.length === 0 || !flushCallback) return;
+  const buffer = new ArrayBuffer(audioBuffer.length);
+  const view = new Uint8Array(buffer);
+  for (let i = 0; i < audioBuffer.length; i++) {
+    view[i] = audioBuffer[i];
+  }
+  audioBuffer = [];
+  flushCallback(buffer);
 }
 
 export async function requestMicPermission(): Promise<boolean> {
@@ -39,7 +68,6 @@ export async function requestMicPermission(): Promise<boolean> {
     );
     return result === PermissionsAndroid.RESULTS.GRANTED;
   }
-  // iOS: Info.plist の NSMicrophoneUsageDescription に基づき OS が権限ダイアログを表示する
   try {
     LiveAudioStream.init(AUDIO_CONFIG);
     return true;
@@ -51,6 +79,8 @@ export async function requestMicPermission(): Promise<boolean> {
 export function initAudio(): void {
   audioBuffer = [];
   muted = false;
+  hasSpeech = false;
+  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   if (Platform.OS === 'android') {
     LiveAudioStream.init(AUDIO_CONFIG);
   }
@@ -58,23 +88,44 @@ export function initAudio(): void {
 
 export function startAudio(onChunk: (chunk: ArrayBuffer) => void): void {
   audioBuffer = [];
+  hasSpeech = false;
+  flushCallback = onChunk;
+
   subscription = LiveAudioStream.on('data', (base64: string) => {
     if (muted) return;
+
     const binary = atob(base64);
+    const chunk: number[] = [];
     for (let i = 0; i < binary.length; i++) {
-      audioBuffer.push(binary.charCodeAt(i));
+      chunk.push(binary.charCodeAt(i));
     }
-    // 一定量溜まったらフラッシュ
-    if (audioBuffer.length >= FLUSH_BYTES) {
-      const buffer = new ArrayBuffer(audioBuffer.length);
-      const view = new Uint8Array(buffer);
-      for (let i = 0; i < audioBuffer.length; i++) {
-        view[i] = audioBuffer[i];
+
+    const rms = computeRMS(chunk);
+    audioBuffer.push(...chunk);
+
+    if (rms > SILENCE_THRESHOLD) {
+      // 発話中 → 無音タイマーをリセット
+      hasSpeech = true;
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+    } else if (hasSpeech) {
+      // 発話後の無音 → タイマーをセット（まだなければ）
+      if (!silenceTimer) {
+        silenceTimer = setTimeout(() => {
+          silenceTimer = null;
+          hasSpeech = false;
+          flush();
+        }, SILENCE_DELAY_MS);
       }
-      audioBuffer = [];
-      onChunk(buffer);
+    }
+
+    // フォールバック：上限を超えたら強制送信
+    if (audioBuffer.length >= MAX_BUFFER_BYTES) {
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+      hasSpeech = false;
+      flush();
     }
   });
+
   LiveAudioStream.start();
 }
 
@@ -82,6 +133,9 @@ export function stopAudio(): void {
   LiveAudioStream.stop();
   subscription?.remove();
   subscription = null;
+  if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
   audioBuffer = [];
   muted = false;
+  hasSpeech = false;
+  flushCallback = null;
 }
