@@ -3,9 +3,12 @@
 
 import { supabase } from '../lib/supabase';
 
-export async function transcribeChunk(
-  chunk: ArrayBuffer,
-): Promise<string | null> {
+export interface TranscribeResult {
+  transcript: string;    // smart_format あり（表示・AI用）
+  rawTranscript: string; // smart_format なし（"うん"等の検出用）
+}
+
+export async function transcribeChunk(chunk: ArrayBuffer): Promise<TranscribeResult | null> {
   // supabase.functions.invoke は JSON しか送れないため fetch を直接使う
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
@@ -25,6 +28,7 @@ export async function transcribeChunk(
     return null;
   }
 
-  const { transcript } = await res.json();
-  return transcript || null;
+  const { transcript, rawTranscript } = await res.json();
+  if (!transcript) return null;
+  return { transcript, rawTranscript: rawTranscript ?? transcript };
 }

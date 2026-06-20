@@ -28,12 +28,16 @@ export function useConversation(
   const [callError, setCallError] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
 
-  const handleFinalTranscript = useCallback(async (convId: string, transcript: string) => {
+  const handleFinalTranscript = useCallback(async (
+    convId: string,
+    transcript: string,
+    rawTranscript: string,
+  ) => {
     console.log('[useConversation] 文字起こし確定:', transcript);
     onUserTranscript?.(transcript);
     const { data, error } = await supabase.functions.invoke<TranscriptHandleResponse>(
       'handle-transcript',
-      { body: { conversationId: convId, transcript } },
+      { body: { conversationId: convId, transcript, rawTranscript } },
     );
     if (error) {
       const detail = await extractFunctionError('handle-transcript', error);
@@ -72,9 +76,9 @@ export function useConversation(
       const convId = conversationIdRef.current;
       if (!convId) return;
 
-      const transcript = await transcribeChunk(chunk);
-      if (transcript) {
-        await handleFinalTranscript(convId, transcript);
+      const result = await transcribeChunk(chunk);
+      if (result) {
+        await handleFinalTranscript(convId, result.transcript, result.rawTranscript);
       }
     });
   }, [handleFinalTranscript]);

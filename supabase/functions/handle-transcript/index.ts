@@ -14,6 +14,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 interface RequestBody {
   conversationId: string;
   transcript: string;
+  rawTranscript?: string;
 }
 
 function containsUn(transcript: string): boolean {
@@ -48,14 +49,15 @@ Deno.serve(async (req: Request) => {
   }
   console.log(`${TAG} 2. 認証成功: user_id=${user.id}`);
 
-  const { conversationId, transcript }: RequestBody = await req.json();
+  const { conversationId, transcript, rawTranscript }: RequestBody = await req.json();
   if (!conversationId || !transcript) {
     console.error(`${TAG} 3. バリデーション失敗: conversationId=${conversationId} transcript=${!!transcript}`);
     return new Response('conversationId と transcript は必須です', { status: 400 });
   }
   console.log(`${TAG} 3. リクエストボディ確認: conversationId=${conversationId} transcript="${transcript.slice(0, 30)}..."`);
 
-  const unDetected = containsUn(transcript);
+  // rawTranscript（smart_format なし）で検出することで漢字変換との衝突を防ぐ
+  const unDetected = containsUn(rawTranscript ?? transcript);
   console.log(`${TAG} 4. 「うん」判定: ${unDetected}`);
   if (unDetected) {
     const { error: evError } = await supabase.from('events').insert({
