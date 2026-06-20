@@ -11,6 +11,8 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+
+
 interface RequestBody {
   conversationId: string;
   transcript: string;
@@ -24,6 +26,11 @@ interface ChatMessage {
 function containsUn(transcript: string): boolean {
   return transcript.includes('うん');
 }
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+};
 
 Deno.serve(async (req: Request) => {
   const supabase = createClient(

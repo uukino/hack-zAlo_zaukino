@@ -41,7 +41,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // Deepgram一時トークン発行(モバイル向けにTTLを1時間に設定)
-  const dgRes = await fetch('https://api.deepgram.com/v1/auth/grant', {
+  const dgRes = await fetch('https://api.deepgram.com/v1/projects/%7BPROJECT_ID%7D/keys', {
     method: 'POST',
     headers: {
       Authorization: `Token ${Deno.env.get('DEEPGRAM_API_KEY')}`,
