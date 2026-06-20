@@ -22,14 +22,22 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.uukino.hackzalo"
+
+
+=======
+      "package": "com.astellie.hackzalo"
+
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "5388d745-9ff0-4519-844f-3bb00274d988"
+
+
+=======
+        "projectId": "4982a95e-948b-4f8c-bfb5-494fae2c1d1a"
+
       }
     }
   }
