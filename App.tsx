@@ -8,9 +8,19 @@ import { muteAudio, unmuteAudio } from './src/services/audio';
 import { supabase } from './src/lib/supabase';
 import { useConversation } from './src/hooks/useConversation';
 import { LoginScreen } from './src/components/LoginScreen';
+import { SandCrumbleText } from './src/components/SandCrumbleText';
+import { ExplodeText } from './src/components/ExplodeText';
+import { CarCrossText } from './src/components/CarCrossText';
+import { CountdownEffectText } from './src/components/CountdownEffectText';
+import { setupNotifications, notifyUnDetected } from './src/services/notifications';
 import type { Message } from './src/types';
 
-type LocalMessage = Message | { id: string; role: 'system'; content: string; created_at: string; conversation_id: string };
+type UnEffect = 'crumble' | 'explode' | 'car' | 'countdown';
+const UN_EFFECTS: UnEffect[] = ['crumble', 'explode', 'car', 'countdown'];
+
+type LocalMessage =
+  | (Message & { effect?: UnEffect })
+  | { id: string; role: 'system'; content: string; created_at: string; conversation_id: string };
 
 function makeSystemMsg(content: string): LocalMessage {
   return { id: Date.now().toString() + Math.random(), role: 'system', content, created_at: new Date().toISOString(), conversation_id: '' };
@@ -30,6 +40,11 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // ── 通知権限のセットアップ ──────────────────────────
+  useEffect(() => {
+    setupNotifications();
+  }, []);
+
   const addMessage = useCallback((msg: LocalMessage) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
@@ -44,11 +59,21 @@ export default function App() {
     });
   }, [addMessage]);
 
-  const handleUserTranscript = useCallback((transcript: string) => {
-    addMessage({ id: Date.now().toString() + '_u', role: 'user', content: transcript, created_at: new Date().toISOString(), conversation_id: '' });
+  const handleUserTranscript = useCallback((transcript: string, id: string) => {
+    addMessage({ id, role: 'user', content: transcript, created_at: new Date().toISOString(), conversation_id: '' });
   }, [addMessage]);
 
-  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(handleAssistantReply, handleUserTranscript);
+  const [carCrossKey, setCarCrossKey] = useState(0);
+  const triggerCarCross = useCallback(() => setCarCrossKey((k) => k + 1), []);
+
+  const handleUnDetected = useCallback((id: string) => {
+    notifyUnDetected();
+    const effect = UN_EFFECTS[Math.floor(Math.random() * UN_EFFECTS.length)];
+    if (effect === 'car') triggerCarCross();
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, effect } : m)));
+  }, [triggerCarCross]);
+
+  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(handleAssistantReply, handleUserTranscript, handleUnDetected);
 
   const startConversation = useCallback(async () => {
     addMessage(makeSystemMsg('── 会話を開始しました ──'));
@@ -124,7 +149,23 @@ export default function App() {
                 <Text style={styles.roleLabel}>
                   {item.role === 'user' ? 'あなた' : 'AI'}
                 </Text>
-                <Text style={styles.messageText}>{item.content}</Text>
+                {'effect' in item && item.effect === 'crumble' && (
+                  <SandCrumbleText text={item.content} trigger style={styles.messageText} />
+                )}
+                {'effect' in item && item.effect === 'explode' && (
+                  <ExplodeText text={item.content} trigger style={styles.messageText} />
+                )}
+                {'effect' in item && item.effect === 'countdown' && (
+                  <CountdownEffectText
+                    text={item.content}
+                    trigger
+                    style={styles.messageText}
+                    onCarEffect={triggerCarCross}
+                  />
+                )}
+                {(!('effect' in item) || item.effect === undefined || item.effect === 'car') && (
+                  <Text style={styles.messageText}>{item.content}</Text>
+                )}
               </View>
             );
           }}
@@ -146,6 +187,9 @@ export default function App() {
             onPress={conversationId ? stopConversation : startConversation}
           />
         </View>
+
+        {/* 画面下部を車が横切る演出（特定のメッセージに紐づかない） */}
+        <CarCrossText key={carCrossKey} trigger={carCrossKey > 0} />
       </SafeAreaView>
     </SafeAreaProvider>
   );
