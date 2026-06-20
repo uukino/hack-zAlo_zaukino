@@ -1,63 +1,175 @@
 // App.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Button, FlatList } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { useConversation } from './src/hooks/useConversation';
+import { LoginScreen } from './src/components/LoginScreen';
 import type { Message } from './src/types';
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const { startConversation } = useConversation();
+  const { conversationId, startConversation, stopConversation } = useConversation();
+  const flatListRef = useRef<FlatList<Message>>(null);
 
+  // ── 認証状態の監視 ──────────────────────────────────
   useEffect(() => {
-    // 1. 最初に、過去のメッセージを全件取得する
-    const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (!error && data) setMessages(data as Message[]);
-    };
-    fetchMessages();
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
-    // 2. ★これがWebSocket（Realtime）処理★
-    // データベースの 'messages' テーブルで INSERT（データ追加）が起きたらリアルタイムに受け取る
+  // ── 会話メッセージの取得・Realtime購読 ───────────────
+  useEffect(() => {
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+
+    // 既存メッセージを取得
+    supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data) setMessages(data as Message[]);
+      });
+
+    // 新着メッセージをリアルタイムで受け取る（この会話のみ）
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`messages:${conversationId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+          const newMsg = payload.new as Message;
+          // 初回fetchとRealtimeの間に挿入されたメッセージの重複を防ぐ
+          setMessages((prev) =>
+            prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg],
+          );
         },
       )
       .subscribe();
 
-    // 画面が閉じるときにWebSocketの接続を切断する
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    return () => { supabase.removeChannel(channel); };
+  }, [conversationId]);
+
+  // 新メッセージが来たら末尾へスクロール
+  useEffect(() => {
+    if (messages.length > 0) {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }, [messages.length]);
+
+  if (!session) {
+    return <LoginScreen />;
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>チャットテスト</Text>
-      <Button title="会話を開始" onPress={startConversation} />
+    <SafeAreaView style={styles.container}>
+      {/* ヘッダー */}
+      <View style={styles.header}>
+        <Text style={styles.title}>AI会話</Text>
+        <Button title="ログアウト" onPress={() => supabase.auth.signOut()} />
+      </View>
+
+      {/* メッセージ一覧 */}
       <FlatList
+        ref={flatListRef}
         data={messages}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
-          <View style={styles.messageBox}>
-            <Text>{item.content}</Text>
+          <View
+            style={[
+              styles.bubble,
+              item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+            ]}
+          >
+            <Text style={styles.roleLabel}>
+              {item.role === 'user' ? 'あなた' : 'AI'}
+            </Text>
+            <Text style={styles.messageText}>{item.content}</Text>
           </View>
         )}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>
+            {conversationId ? '話しかけてください' : '「会話を開始」を押してください'}
+          </Text>
+        }
       />
-    </View>
+
+      {/* フッター */}
+      <View style={styles.footer}>
+        {conversationId && (
+          <Text style={styles.recordingIndicator}>● 録音中</Text>
+        )}
+        <Button
+          title={conversationId ? '会話を終了' : '会話を開始'}
+          onPress={conversationId ? stopConversation : startConversation}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingTop: 60, paddingHorizontal: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  messageBox: { padding: 10, borderBottomWidth: 1, borderColor: '#eee' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  title: { fontSize: 20, fontWeight: 'bold' },
+  list: { flex: 1 },
+  listContent: { padding: 12, gap: 8 },
+  bubble: {
+    maxWidth: '80%',
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#DCF8C6',
+  },
+  assistantBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  roleLabel: { fontSize: 11, color: '#888', marginBottom: 2 },
+  messageText: { fontSize: 15 },
+  emptyText: {
+    textAlign: 'center',
+    color: '#aaa',
+    marginTop: 60,
+    fontSize: 14,
+  },
+  footer: {
+    padding: 16,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderColor: '#e0e0e0',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordingIndicator: { color: '#e53935', fontSize: 13 },
 });
