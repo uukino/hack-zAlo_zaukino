@@ -33,6 +33,11 @@ const corsHeaders = {
 const TAG = '[handle-transcript]';
 
 Deno.serve(async (req: Request) => {
+  // CORSプリフライト
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   console.log(`${TAG} 1. リクエスト受信`);
 
   const supabase = createClient(
