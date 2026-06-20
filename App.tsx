@@ -10,39 +10,18 @@ import { useConversation } from './src/hooks/useConversation';
 import { LoginScreen } from './src/components/LoginScreen';
 import type { Message } from './src/types';
 
+type LocalMessage = Message | { id: string; role: 'system'; content: string; created_at: string; conversation_id: string };
+
+function makeSystemMsg(content: string): LocalMessage {
+  return { id: Date.now().toString() + Math.random(), role: 'system', content, created_at: new Date().toISOString(), conversation_id: '' };
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const handleAssistantReply = useCallback((reply: string) => {
-    const msg: Message = {
-      id: Date.now().toString(),
-      conversation_id: '',
-      role: 'assistant',
-      content: reply,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, msg]);
-    muteAudio();
-    Speech.speak(reply, {
-      language: 'ja',
-      onDone: unmuteAudio,
-      onError: unmuteAudio,
-    });
-  }, []);
 
-  const handleUserTranscript = useCallback((transcript: string) => {
-    const msg: Message = {
-      id: Date.now().toString() + '_user',
-      conversation_id: '',
-      role: 'user',
-      content: transcript,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, msg]);
-  }, []);
+  const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const flatListRef = useRef<FlatList<LocalMessage>>(null);
 
-  const { conversationId, callError, startConversation, stopConversation } = useConversation(handleAssistantReply, handleUserTranscript);
-  const flatListRef = useRef<FlatList<Message>>(null);
 
   // ── 認証状態の監視 ──────────────────────────────────
   useEffect(() => {
@@ -53,12 +32,37 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 新しい会話が始まったときだけメッセージをリセット
-  useEffect(() => {
-    if (conversationId) {
-      setMessages([]);
-    }
-  }, [conversationId]);
+
+  const addMessage = useCallback((msg: LocalMessage) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
+  const handleAssistantReply = useCallback((reply: string) => {
+    addMessage({ id: Date.now().toString() + '_a', role: 'assistant', content: reply, created_at: new Date().toISOString(), conversation_id: '' });
+    muteAudio();
+    Speech.speak(reply, {
+      language: 'ja',
+      onDone: unmuteAudio,
+      onError: unmuteAudio,
+    });
+  }, [addMessage]);
+
+  const handleUserTranscript = useCallback((transcript: string) => {
+    addMessage({ id: Date.now().toString() + '_u', role: 'user', content: transcript, created_at: new Date().toISOString(), conversation_id: '' });
+  }, [addMessage]);
+
+  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(handleAssistantReply, handleUserTranscript);
+
+  const startConversation = useCallback(async () => {
+    addMessage(makeSystemMsg('── 会話を開始しました ──'));
+    await _start();
+  }, [_start, addMessage]);
+
+  const stopConversation = useCallback(() => {
+    _stop();
+    addMessage(makeSystemMsg('── 会話を終了しました ──'));
+  }, [_stop, addMessage]);
+
 
   // 新メッセージが来たら末尾へスクロール
   useEffect(() => {
@@ -91,23 +95,26 @@ export default function App() {
           keyExtractor={(item) => item.id}
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.bubble,
-                item.role === 'user' ? styles.userBubble : styles.assistantBubble,
-              ]}
-            >
-              <Text style={styles.roleLabel}>
-                {item.role === 'user' ? 'あなた' : 'AI'}
-              </Text>
-              <Text style={styles.messageText}>{item.content}</Text>
-            </View>
-          )}
+          renderItem={({ item }) => {
+            if (item.role === 'system') {
+              return <Text style={styles.systemLog}>{item.content}</Text>;
+            }
+            return (
+              <View
+                style={[
+                  styles.bubble,
+                  item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                ]}
+              >
+                <Text style={styles.roleLabel}>
+                  {item.role === 'user' ? 'あなた' : 'AI'}
+                </Text>
+                <Text style={styles.messageText}>{item.content}</Text>
+              </View>
+            );
+          }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {conversationId ? '話しかけてください' : '「会話を開始」を押してください'}
-            </Text>
+            <Text style={styles.emptyText}>「会話を開始」を押してください</Text>
           }
         />
 
@@ -162,6 +169,12 @@ const styles = StyleSheet.create({
   },
   roleLabel: { fontSize: 11, color: '#888', marginBottom: 2 },
   messageText: { fontSize: 15 },
+  systemLog: {
+    textAlign: 'center',
+    color: '#aaa',
+    fontSize: 12,
+    marginVertical: 6,
+  },
   emptyText: {
     textAlign: 'center',
     color: '#aaa',

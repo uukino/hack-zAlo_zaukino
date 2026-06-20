@@ -50,6 +50,7 @@ export async function requestMicPermission(): Promise<boolean> {
 
 export function initAudio(): void {
   audioBuffer = [];
+  muted = false;
   if (Platform.OS === 'android') {
     LiveAudioStream.init(AUDIO_CONFIG);
   }
@@ -82,4 +83,5 @@ export function stopAudio(): void {
   subscription?.remove();
   subscription = null;
   audioBuffer = [];
+  muted = false;
 }
