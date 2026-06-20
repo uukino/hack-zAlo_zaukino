@@ -13,7 +13,11 @@ const personalityPresets: string[] = [
   'あなたは明るく好奇心旺盛な性格です。質問を重ねて会話を広げます。',
 ];
 
+const TAG = '[start-conversation]';
+
 Deno.serve(async (req: Request) => {
+  console.log(`${TAG} 1. リクエスト受信`);
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -23,12 +27,16 @@ Deno.serve(async (req: Request) => {
   const {
     data: { user },
   } = await supabase.auth.getUser(authHeader);
+
   if (!user) {
+    console.error(`${TAG} 2. 認証失敗: Authorization ヘッダーが無効または未設定`);
     return new Response('Unauthorized', { status: 401 });
   }
+  console.log(`${TAG} 2. 認証成功: user_id=${user.id}`);
 
   const personality =
     personalityPresets[Math.floor(Math.random() * personalityPresets.length)];
+  console.log(`${TAG} 3. 性格決定: "${personality.slice(0, 20)}..."`);
 
   const { data: conversation, error } = await supabase
     .from('conversations')
@@ -37,10 +45,11 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (error || !conversation) {
+    console.error(`${TAG} 4. conversations INSERT 失敗: ${error?.message ?? '不明なエラー'}`);
     return new Response(error?.message ?? 'conversation作成に失敗しました', { status: 500 });
   }
+  console.log(`${TAG} 4. conversations INSERT 成功: conversation_id=${conversation.id}`);
 
-  // Deepgram一時トークン発行(モバイル向けにTTLを1時間に設定)
   const dgRes = await fetch('https://api.deepgram.com/v1/projects/%7BPROJECT_ID%7D/keys', {
     method: 'POST',
     headers: {
@@ -50,11 +59,17 @@ Deno.serve(async (req: Request) => {
     body: JSON.stringify({ ttl_seconds: 3600 }),
   });
 
+  console.log(`${TAG} 5. Deepgram API レスポンス: status=${dgRes.status}`);
   if (!dgRes.ok) {
+    const body = await dgRes.text();
+    console.error(`${TAG} 5. Deepgramトークン発行失敗: status=${dgRes.status} body=${body}`);
     return new Response('Deepgramトークンの発行に失敗しました', { status: 502 });
   }
-  const dgToken = await dgRes.json();
 
+  const dgToken = await dgRes.json();
+  console.log(`${TAG} 6. Deepgramトークン取得成功: キーあり=${!!dgToken.access_token}`);
+
+  console.log(`${TAG} 7. 正常終了: conversation_id=${conversation.id}`);
   return new Response(
     JSON.stringify({
       conversationId: conversation.id,

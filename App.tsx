@@ -1,7 +1,7 @@
 // App.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Button, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { useConversation } from './src/hooks/useConversation';
@@ -11,7 +11,7 @@ import type { Message } from './src/types';
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const { conversationId, startConversation, stopConversation } = useConversation();
+  const { conversationId, callError, startConversation, stopConversation } = useConversation();
   const flatListRef = useRef<FlatList<Message>>(null);
 
   // ── 認証状態の監視 ──────────────────────────────────
@@ -30,7 +30,6 @@ export default function App() {
       return;
     }
 
-    // 既存メッセージを取得
     supabase
       .from('messages')
       .select('*')
@@ -40,7 +39,6 @@ export default function App() {
         if (!error && data) setMessages(data as Message[]);
       });
 
-    // 新着メッセージをリアルタイムで受け取る（この会話のみ）
     const channel = supabase
       .channel(`messages:${conversationId}`)
       .on(
@@ -53,7 +51,6 @@ export default function App() {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          // 初回fetchとRealtimeの間に挿入されたメッセージの重複を防ぐ
           setMessages((prev) =>
             prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg],
           );
@@ -72,55 +69,64 @@ export default function App() {
   }, [messages.length]);
 
   if (!session) {
-    return <LoginScreen />;
+    return (
+      <SafeAreaProvider>
+        <LoginScreen />
+      </SafeAreaProvider>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* ヘッダー */}
-      <View style={styles.header}>
-        <Text style={styles.title}>AI会話</Text>
-        <Button title="ログアウト" onPress={() => supabase.auth.signOut()} />
-      </View>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        {/* ヘッダー */}
+        <View style={styles.header}>
+          <Text style={styles.title}>AI会話</Text>
+          <Button title="ログアウト" onPress={() => supabase.auth.signOut()} />
+        </View>
 
-      {/* メッセージ一覧 */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.bubble,
-              item.role === 'user' ? styles.userBubble : styles.assistantBubble,
-            ]}
-          >
-            <Text style={styles.roleLabel}>
-              {item.role === 'user' ? 'あなた' : 'AI'}
+        {/* メッセージ一覧 */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <View
+              style={[
+                styles.bubble,
+                item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+              ]}
+            >
+              <Text style={styles.roleLabel}>
+                {item.role === 'user' ? 'あなた' : 'AI'}
+              </Text>
+              <Text style={styles.messageText}>{item.content}</Text>
+            </View>
+          )}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>
+              {conversationId ? '話しかけてください' : '「会話を開始」を押してください'}
             </Text>
-            <Text style={styles.messageText}>{item.content}</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {conversationId ? '話しかけてください' : '「会話を開始」を押してください'}
-          </Text>
-        }
-      />
-
-      {/* フッター */}
-      <View style={styles.footer}>
-        {conversationId && (
-          <Text style={styles.recordingIndicator}>● 録音中</Text>
-        )}
-        <Button
-          title={conversationId ? '会話を終了' : '会話を開始'}
-          onPress={conversationId ? stopConversation : startConversation}
+          }
         />
-      </View>
-    </SafeAreaView>
+
+        {/* フッター */}
+        <View style={styles.footer}>
+          {callError && (
+            <Text style={styles.errorText}>{callError}</Text>
+          )}
+          {conversationId && (
+            <Text style={styles.recordingIndicator}>● 録音中</Text>
+          )}
+          <Button
+            title={conversationId ? '会話を終了' : '会話を開始'}
+            onPress={conversationId ? stopConversation : startConversation}
+          />
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
@@ -172,4 +178,5 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   recordingIndicator: { color: '#e53935', fontSize: 13 },
+  errorText: { color: '#e53935', fontSize: 12, textAlign: 'center' },
 });
