@@ -1,8 +1,10 @@
 // App.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Button, FlatList } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
+import * as Speech from 'expo-speech';
+import { muteAudio, unmuteAudio } from './src/services/audio';
 import { supabase } from './src/lib/supabase';
 import { useConversation } from './src/hooks/useConversation';
 import { LoginScreen } from './src/components/LoginScreen';
@@ -11,7 +13,35 @@ import type { Message } from './src/types';
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const { conversationId, callError, startConversation, stopConversation } = useConversation();
+  const handleAssistantReply = useCallback((reply: string) => {
+    const msg: Message = {
+      id: Date.now().toString(),
+      conversation_id: '',
+      role: 'assistant',
+      content: reply,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, msg]);
+    muteAudio();
+    Speech.speak(reply, {
+      language: 'ja',
+      onDone: unmuteAudio,
+      onError: unmuteAudio,
+    });
+  }, []);
+
+  const handleUserTranscript = useCallback((transcript: string) => {
+    const msg: Message = {
+      id: Date.now().toString() + '_user',
+      conversation_id: '',
+      role: 'user',
+      content: transcript,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
+  const { conversationId, callError, startConversation, stopConversation } = useConversation(handleAssistantReply, handleUserTranscript);
   const flatListRef = useRef<FlatList<Message>>(null);
 
   // ── 認証状態の監視 ──────────────────────────────────
@@ -23,42 +53,11 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 会話メッセージの取得・Realtime購読 ───────────────
+  // 新しい会話が始まったときだけメッセージをリセット
   useEffect(() => {
-    if (!conversationId) {
+    if (conversationId) {
       setMessages([]);
-      return;
     }
-
-    supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data) setMessages(data as Message[]);
-      });
-
-    const channel = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new as Message;
-          setMessages((prev) =>
-            prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg],
-          );
-        },
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [conversationId]);
 
   // 新メッセージが来たら末尾へスクロール
