@@ -18,8 +18,10 @@ function makeSystemMsg(content: string): LocalMessage {
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const flatListRef = useRef<FlatList<LocalMessage>>(null);
+
 
   // ── 認証状態の監視 ──────────────────────────────────
   useEffect(() => {
@@ -29,6 +31,7 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
 
   const addMessage = useCallback((msg: LocalMessage) => {
     setMessages((prev) => [...prev, msg]);
@@ -59,6 +62,7 @@ export default function App() {
     _stop();
     addMessage(makeSystemMsg('── 会話を終了しました ──'));
   }, [_stop, addMessage]);
+
 
   // 新メッセージが来たら末尾へスクロール
   useEffect(() => {
