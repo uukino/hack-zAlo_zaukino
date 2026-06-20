@@ -1,16 +1,22 @@
-// App.js
+// App.tsx
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Button, FlatList } from 'react-native';
-import { supabase } from './supabase';
+import { supabase } from './src/lib/supabase';
+import { useConversation } from './src/hooks/useConversation';
+import type { Message } from './src/types';
 
 export default function App() {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const { startConversation } = useConversation();
 
   useEffect(() => {
     // 1. 最初に、過去のメッセージを全件取得する
     const fetchMessages = async () => {
-      const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-      if (!error) setMessages(data);
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error && data) setMessages(data as Message[]);
     };
     fetchMessages();
 
@@ -22,9 +28,8 @@ export default function App() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
-          // 新しいメッセージを既存のリストの末尾に追加
-          setMessages((prev) => [...prev, payload.new]);
-        }
+          setMessages((prev) => [...prev, payload.new as Message]);
+        },
       )
       .subscribe();
 
@@ -34,18 +39,10 @@ export default function App() {
     };
   }, []);
 
-  // テスト送信用の関数（Supabaseにデータを送る）
-  const sendMessage = async () => {
-    const { error } = await supabase
-      .from('messages')
-      .insert([{ content: `テストメッセージ (${new Date().toLocaleTimeString()})` }]);
-    if (error) console.log('送信エラー:', error);
-  };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>チャットテスト</Text>
-      <Button title="メッセージを送信（テスト）" onPress={sendMessage} />
+      <Button title="会話を開始" onPress={startConversation} />
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id.toString()}
