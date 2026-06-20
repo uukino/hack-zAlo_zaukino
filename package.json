@@ -1,7 +1,7 @@
 {
   "name": "hackz-alo",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index.ts",
   "dependencies": {
     "@deepgram/sdk": "^5.4.0",
     "@supabase/supabase-js": "^2.108.2",
@@ -20,6 +20,7 @@
   },
   "private": true,
   "devDependencies": {
-    "@types/react": "^19.2.17"
+    "@types/react": "^19.2.17",
+    "typescript": "~5.9.2"
   }
 }
