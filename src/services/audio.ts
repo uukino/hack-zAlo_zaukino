@@ -14,6 +14,17 @@ const FLUSH_BYTES = 32000;
 
 let subscription: EmitterSubscription | null = null;
 let audioBuffer: number[] = [];
+let muted = false;
+
+export function muteAudio(): void {
+  muted = true;
+  audioBuffer = [];
+}
+
+export function unmuteAudio(): void {
+  muted = false;
+  audioBuffer = [];
+}
 
 export async function requestMicPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
@@ -39,6 +50,7 @@ export async function requestMicPermission(): Promise<boolean> {
 
 export function initAudio(): void {
   audioBuffer = [];
+  muted = false;
   if (Platform.OS === 'android') {
     LiveAudioStream.init(AUDIO_CONFIG);
   }
@@ -47,6 +59,7 @@ export function initAudio(): void {
 export function startAudio(onChunk: (chunk: ArrayBuffer) => void): void {
   audioBuffer = [];
   subscription = LiveAudioStream.on('data', (base64: string) => {
+    if (muted) return;
     const binary = atob(base64);
     for (let i = 0; i < binary.length; i++) {
       audioBuffer.push(binary.charCodeAt(i));
@@ -70,4 +83,5 @@ export function stopAudio(): void {
   subscription?.remove();
   subscription = null;
   audioBuffer = [];
+  muted = false;
 }

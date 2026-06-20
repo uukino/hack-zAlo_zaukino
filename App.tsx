@@ -1,18 +1,25 @@
 // App.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Button, FlatList } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
+import * as Speech from 'expo-speech';
+import { muteAudio, unmuteAudio } from './src/services/audio';
 import { supabase } from './src/lib/supabase';
 import { useConversation } from './src/hooks/useConversation';
 import { LoginScreen } from './src/components/LoginScreen';
 import type { Message } from './src/types';
 
+type LocalMessage = Message | { id: string; role: 'system'; content: string; created_at: string; conversation_id: string };
+
+function makeSystemMsg(content: string): LocalMessage {
+  return { id: Date.now().toString() + Math.random(), role: 'system', content, created_at: new Date().toISOString(), conversation_id: '' };
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const { conversationId, callError, startConversation, stopConversation } = useConversation();
-  const flatListRef = useRef<FlatList<Message>>(null);
+  const [messages, setMessages] = useState<LocalMessage[]>([]);
+  const flatListRef = useRef<FlatList<LocalMessage>>(null);
 
   // ── 認証状態の監視 ──────────────────────────────────
   useEffect(() => {
@@ -23,43 +30,35 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 会話メッセージの取得・Realtime購読 ───────────────
-  useEffect(() => {
-    if (!conversationId) {
-      setMessages([]);
-      return;
-    }
+  const addMessage = useCallback((msg: LocalMessage) => {
+    setMessages((prev) => [...prev, msg]);
+  }, []);
 
-    supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (!error && data) setMessages(data as Message[]);
-      });
+  const handleAssistantReply = useCallback((reply: string) => {
+    addMessage({ id: Date.now().toString() + '_a', role: 'assistant', content: reply, created_at: new Date().toISOString(), conversation_id: '' });
+    muteAudio();
+    Speech.speak(reply, {
+      language: 'ja',
+      onDone: unmuteAudio,
+      onError: unmuteAudio,
+    });
+  }, [addMessage]);
 
-    const channel = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          const newMsg = payload.new as Message;
-          setMessages((prev) =>
-            prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg],
-          );
-        },
-      )
-      .subscribe();
+  const handleUserTranscript = useCallback((transcript: string) => {
+    addMessage({ id: Date.now().toString() + '_u', role: 'user', content: transcript, created_at: new Date().toISOString(), conversation_id: '' });
+  }, [addMessage]);
 
-    return () => { supabase.removeChannel(channel); };
-  }, [conversationId]);
+  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(handleAssistantReply, handleUserTranscript);
+
+  const startConversation = useCallback(async () => {
+    addMessage(makeSystemMsg('── 会話を開始しました ──'));
+    await _start();
+  }, [_start, addMessage]);
+
+  const stopConversation = useCallback(() => {
+    _stop();
+    addMessage(makeSystemMsg('── 会話を終了しました ──'));
+  }, [_stop, addMessage]);
 
   // 新メッセージが来たら末尾へスクロール
   useEffect(() => {
@@ -92,23 +91,26 @@ export default function App() {
           keyExtractor={(item) => item.id}
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.bubble,
-                item.role === 'user' ? styles.userBubble : styles.assistantBubble,
-              ]}
-            >
-              <Text style={styles.roleLabel}>
-                {item.role === 'user' ? 'あなた' : 'AI'}
-              </Text>
-              <Text style={styles.messageText}>{item.content}</Text>
-            </View>
-          )}
+          renderItem={({ item }) => {
+            if (item.role === 'system') {
+              return <Text style={styles.systemLog}>{item.content}</Text>;
+            }
+            return (
+              <View
+                style={[
+                  styles.bubble,
+                  item.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                ]}
+              >
+                <Text style={styles.roleLabel}>
+                  {item.role === 'user' ? 'あなた' : 'AI'}
+                </Text>
+                <Text style={styles.messageText}>{item.content}</Text>
+              </View>
+            );
+          }}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {conversationId ? '話しかけてください' : '「会話を開始」を押してください'}
-            </Text>
+            <Text style={styles.emptyText}>「会話を開始」を押してください</Text>
           }
         />
 
@@ -163,6 +165,12 @@ const styles = StyleSheet.create({
   },
   roleLabel: { fontSize: 11, color: '#888', marginBottom: 2 },
   messageText: { fontSize: 15 },
+  systemLog: {
+    textAlign: 'center',
+    color: '#aaa',
+    fontSize: 12,
+    marginVertical: 6,
+  },
   emptyText: {
     textAlign: 'center',
     color: '#aaa',
