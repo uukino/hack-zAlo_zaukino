@@ -52,7 +52,7 @@
 | 項目 | 根拠 |
 |------|------|
 | **エラー時のユーザー体験が薄い** | `callError` を state で持つが、UI 上でどう表示するかはコンポーネント側に丸投げ。リトライ機構もない。 |
-| **`muteAudio()` の呼び出しタイミングが未定義** | 関数は実装されているが、フックや UI 側からいつ呼ぶかが設計されていない (AI 返答中の二重録音問題が潜在)。 |
+| **`personalityNameRef` のブリッジパターン** | `handleAssistantReply` は `useConversation` より前に定義されるため `personalityName` state を直接参照できない。`useEffect` で ref に同期するブリッジを挟んでいる。回避できる設計にもできたが、実装速度優先で採用。 |
 | **`fortune` Edge Function が認証を検証するが使わない** | user を取得して認証チェックするが、fortune 生成自体に user_id は不要。一貫性のためだけに存在している。 |
 | **パーティクルの grains が `useMemo` 依存を手動管理** | `[layout, text]` と書いており `physics` が依存に含まれていない。ESLint の exhaustive-deps に引っかかる実装。 |
 
@@ -96,6 +96,10 @@
 
 - Groq API (`llama-3.1-8b-instant`) に system + 会話履歴 + ユーザー発言を送信
 - 返答を `messages` テーブルに保存してクライアントに返す
+- **会話促進指示 (`CONVERSATION_INSTRUCTION`)** を全性格のシステムプロンプトの先頭に付与
+  - 2〜3文の短さで返答する
+  - 最後に必ず問いかけ・話を振る一言を添える
+  - テンポよい口語表現を使用する
 
 ### 2-4. 会話管理フック
 
@@ -122,29 +126,65 @@ stopConversation() → stopAudio → 状態リセット
 
 **性格一覧 (21 種)**
 
-| # | 性格 |
-|---|------|
-| 1 | 皮肉屋・論理的 |
-| 2 | 明るく好奇心旺盛 |
-| 3 | 自信過剰 |
-| 4 | 大げさ |
-| 5 | 毒舌 |
-| 6 | 天然 |
-| 7 | 負けず嫌い |
-| 8 | 大仰・古風 |
-| 9 | 偏愛家 |
-| 10 | 照れ屋 |
-| 11 | 調子乗り |
-| 12 | 勿体ぶる |
-| 13 | 雑学好き |
-| 14 | 強気・屁理屈 |
-| 15 | 世話好き |
-| 16 | 謎めいた |
-| 17 | 熱血 |
-| 18 | 甘えん坊 |
-| 19 | 頑固 |
-| 20 | 見栄っ張り |
-| 21 | 寂しがり屋 |
+| # | コードネーム | 性格 | 画像キー |
+|---|-------------|------|---------|
+| 1 | シニカル | 皮肉屋・論理的 | `hiniku` |
+| 2 | キュリオ | 明るく好奇心旺盛 | `akarui` |
+| 3 | ドヤ | 自信過剰 | `jishinkajou` |
+| 4 | ドラマ | 大げさ | `ogesa` |
+| 5 | トゲ | 毒舌 | `dokuzetsu` |
+| 6 | フワリ | 天然 | `tennen` |
+| 7 | ガチ | 負けず嫌い | `makezugirai` |
+| 8 | ゴウ | 大仰・古風 | `ogyou` |
+| 9 | マニア | 偏愛家 | `henai` |
+| 10 | ポッ | 照れ屋 | `tereya` |
+| 11 | ノリ | 調子乗り | `choushinori` |
+| 12 | タメ | 勿体ぶる | `mottaiburu` |
+| 13 | ウンチク | 雑学好き | `zatsugakusuki` |
+| 14 | ゴリ | 強気・屁理屈 | `tsuyoki` |
+| 15 | オセワ | 世話好き | `sewasuki` |
+| 16 | ナゾ | 謎めいた | `nazo` |
+| 17 | アツ | 熱血 | `nekketsu` |
+| 18 | アマ | 甘えん坊 | `amaenbou` |
+| 19 | ガン | 頑固 | `ganko` |
+| 20 | ハッタリ | 見栄っ張り | `miehari` |
+| 21 | ロンリー | 寂しがり屋 | `samishigari` |
+
+`start-conversation` は `personalityName`（コードネーム）と `personalityImage`（画像キー）を返す。
+
+---
+
+## 3-A. キャラクター画像
+
+**ファイル:** [src/constants/personalityImages.ts](../src/constants/personalityImages.ts)
+
+- 21 種の性格それぞれに PNG 画像アセットを対応付けたマップ (`personalityImages`)
+- `getPersonalityImage(key)` でキー文字列から `ImageSourcePropType` を取得
+- `useConversation` が返す `personalityImage` (キー文字列) をメッセージバブルのヘッダーに `<Image>` で表示
+- アバター画像は各メッセージに埋め込まれる（`LocalMessage` 型の `personalityImage?: string` フィールド）ため、会話中に性格が変わっても過去のメッセージは発話時の画像を保持する
+
+---
+
+## 3-B. 音声読み上げ (TTS)
+
+**ファイル:** [App.tsx](../App.tsx) — `SPEECH_PARAMS` / `releaseSpeak`
+
+- `expo-speech` で AI 返答・運勢メッセージを日本語で読み上げ
+- 性格ごとに `pitch`（音の高さ 0.5–2.0）と `rate`（話速 0.0–1.0）を個別に設定
+
+| 性格 | pitch | rate |
+|------|-------|------|
+| シニカル | 0.85 | 0.85 |
+| キュリオ | 1.20 | 1.10 |
+| ゴウ | 0.80 | 0.75 |
+| アツ | 1.10 | 1.25 |
+| タメ | 0.90 | 0.70 |
+| (他 16 種) | — | — |
+
+- **読み上げカウンタ (`speechCountRef`)** — AI 返答と運勢読み上げが同時に走っても、全読み上げ完了後にのみミュートを解除する競合制御
+  - 開始時に `speechCountRef.current += 1`
+  - `onDone` / `onError` で `speechCountRef.current -= 1` し、0 になったら `unmuteAudio()`
+- 運勢読み上げは GPS + API 呼び出しの非同期待機中もカウンタを保持するため、その間に AI 返答が完了しても誤ってミュートが解除されない
 
 ---
 
@@ -292,3 +332,4 @@ events
 | Open-Meteo | 現在地の雲量取得 |
 | expo-location | GPS 位置情報 |
 | expo-notifications | ローカルプッシュ通知 |
+| expo-speech | AI 返答・運勢の音声読み上げ (TTS) |
