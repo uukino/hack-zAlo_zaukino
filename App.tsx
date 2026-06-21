@@ -29,6 +29,32 @@ function makeSystemMsg(content: string): LocalMessage {
   return { id: Date.now().toString() + Math.random(), role: 'system', content, created_at: new Date().toISOString(), conversation_id: '' };
 }
 
+// 性格ごとの話し方パラメータ（pitch: 音の高さ 0.5–2.0、rate: 話速 0.0–1.0）
+const SPEECH_PARAMS: Record<string, { pitch: number; rate: number }> = {
+  'シニカル': { pitch: 0.85, rate: 0.85 },
+  'キュリオ': { pitch: 1.20, rate: 1.10 },
+  'ドヤ':     { pitch: 0.90, rate: 1.00 },
+  'ドラマ':   { pitch: 1.00, rate: 0.80 },
+  'トゲ':     { pitch: 1.10, rate: 1.15 },
+  'フワリ':   { pitch: 1.15, rate: 0.90 },
+  'ガチ':     { pitch: 0.90, rate: 1.20 },
+  'ゴウ':     { pitch: 0.80, rate: 0.75 },
+  'マニア':   { pitch: 1.10, rate: 1.20 },
+  'ポッ':     { pitch: 1.20, rate: 0.90 },
+  'ノリ':     { pitch: 1.15, rate: 1.20 },
+  'タメ':     { pitch: 0.90, rate: 0.70 },
+  'ウンチク': { pitch: 1.00, rate: 0.95 },
+  'ゴリ':     { pitch: 0.85, rate: 1.10 },
+  'オセワ':   { pitch: 1.10, rate: 1.00 },
+  'ナゾ':     { pitch: 0.85, rate: 0.80 },
+  'アツ':     { pitch: 1.10, rate: 1.25 },
+  'アマ':     { pitch: 1.20, rate: 0.95 },
+  'ガン':     { pitch: 0.85, rate: 0.90 },
+  'ハッタリ': { pitch: 1.10, rate: 1.10 },
+  'ロンリー': { pitch: 1.00, rate: 0.80 },
+};
+const DEFAULT_SPEECH_PARAMS = { pitch: 1.0, rate: 1.0 };
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -57,6 +83,8 @@ export default function App() {
 
   // 読み上げが複数重なっても全て終わるまでミュートを維持するカウンタ
   const speechCountRef = useRef(0);
+  // personalityName は useConversation から来るが callback 内で参照するため ref で保持
+  const personalityNameRef = useRef<string | null>(null);
   const releaseSpeak = useCallback(() => {
     speechCountRef.current -= 1;
     if (speechCountRef.current <= 0) {
@@ -76,11 +104,8 @@ export default function App() {
     });
     muteAudio();
     speechCountRef.current += 1;
-    Speech.speak(reply, {
-      language: 'ja',
-      onDone: releaseSpeak,
-      onError: releaseSpeak,
-    });
+    const sp = SPEECH_PARAMS[personalityNameRef.current ?? ''] ?? DEFAULT_SPEECH_PARAMS;
+    Speech.speak(reply, { language: 'ja', pitch: sp.pitch, rate: sp.rate, onDone: releaseSpeak, onError: releaseSpeak });
   }, [addMessage, releaseSpeak]);
 
   const handleUserTranscript = useCallback((transcript: string, id: string) => {
@@ -126,7 +151,8 @@ export default function App() {
       conversation_id: '',
       personalityImage: personalityImageRef.current ?? undefined,
     });
-    Speech.speak(data.message, { language: 'ja', onDone: releaseSpeak, onError: releaseSpeak });
+    const sp = SPEECH_PARAMS[personalityNameRef.current ?? ''] ?? DEFAULT_SPEECH_PARAMS;
+    Speech.speak(data.message, { language: 'ja', pitch: sp.pitch, rate: sp.rate, onDone: releaseSpeak, onError: releaseSpeak });
   }, [addMessage, releaseSpeak]);
 
   const { conversationId, personalityName, personalityImage, callError, startConversation: _start, stopConversation: _stop } = useConversation(
@@ -139,6 +165,7 @@ export default function App() {
   useEffect(() => {
     personalityImageRef.current = personalityImage;
   }, [personalityImage]);
+
 
   const startConversation = useCallback(async () => {
     addMessage(makeSystemMsg('── 会話を開始しました ──'));
@@ -189,7 +216,7 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         {/* ヘッダー */}
         <View style={styles.header}>
-          <Text style={styles.title}>AI会話</Text>
+          <Text style={styles.title}>運チャット</Text>
           <Button title="ログアウト" onPress={handleLogout} />
         </View>
 

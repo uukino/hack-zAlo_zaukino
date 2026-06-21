@@ -1,8 +1,7 @@
 // supabase/functions/start-conversation/index.ts
 //
 // 会話ごとの性格をランダムに決定し、conversationsテーブルに保存して
-// conversationId を返す。Deepgram接続はクライアントから直接ではなく
-// transcribe Edge Function 経由で行うため、トークン発行は不要になった。
+// conversationId と personalityName を返す。
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
