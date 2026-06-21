@@ -13,7 +13,9 @@ import { ExplodeText } from './src/components/ExplodeText';
 import { CarCrossText } from './src/components/CarCrossText';
 import { CountdownEffectText } from './src/components/CountdownEffectText';
 import { setupNotifications, notifyUnDetected } from './src/services/notifications';
-import type { Message } from './src/types';
+import { getCurrentCloudCover } from './src/services/weather';
+import { getFortuneLevel } from './src/utils/fortune';
+import type { FortuneResponse, Message } from './src/types';
 
 type UnEffect = 'crumble' | 'explode' | 'car' | 'countdown';
 const UN_EFFECTS: UnEffect[] = ['crumble', 'explode', 'car', 'countdown'];
@@ -73,7 +75,39 @@ export default function App() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, effect } : m)));
   }, [triggerCarCross]);
 
-  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(handleAssistantReply, handleUserTranscript, handleUnDetected);
+  const handleUnseiDetected = useCallback(async () => {
+    const cloudCover = await getCurrentCloudCover();
+    if (cloudCover === null) {
+      addMessage(makeSystemMsg('── 運勢の判定に失敗しました（位置情報を取得できません）──'));
+      return;
+    }
+
+    const fortuneLevel = getFortuneLevel(cloudCover);
+    const { data, error } = await supabase.functions.invoke<FortuneResponse>('fortune', {
+      body: { fortuneLevel, cloudCover },
+    });
+    if (error || !data?.message) {
+      addMessage(makeSystemMsg('── 運勢メッセージの取得に失敗しました ──'));
+      return;
+    }
+
+    addMessage({
+      id: Date.now().toString() + '_fortune',
+      role: 'assistant',
+      content: `【今日の運勢: ${fortuneLevel}】${data.message}`,
+      created_at: new Date().toISOString(),
+      conversation_id: '',
+    });
+    muteAudio();
+    Speech.speak(data.message, { language: 'ja', onDone: unmuteAudio, onError: unmuteAudio });
+  }, [addMessage]);
+
+  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(
+    handleAssistantReply,
+    handleUserTranscript,
+    handleUnDetected,
+    handleUnseiDetected,
+  );
 
   const startConversation = useCallback(async () => {
     addMessage(makeSystemMsg('── 会話を開始しました ──'));

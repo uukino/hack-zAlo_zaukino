@@ -24,6 +24,7 @@ export function useConversation(
   onAssistantReply?: (reply: string) => void,
   onUserTranscript?: (transcript: string, id: string) => void,
   onUnDetected?: (id: string) => void,
+  onUnseiDetected?: () => void,
 ) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
@@ -48,9 +49,12 @@ export function useConversation(
       if (data.unDetected) {
         onUnDetected?.(userMsgId);
       }
+      if (data.unseiDetected) {
+        onUnseiDetected?.();
+      }
       onAssistantReply?.(data.assistantReply);
     }
-  }, [onAssistantReply, onUserTranscript, onUnDetected]);
+  }, [onAssistantReply, onUserTranscript, onUnDetected, onUnseiDetected]);
 
   const startConversation = useCallback(async () => {
     setCallError(null);

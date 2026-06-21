@@ -21,4 +21,9 @@ export interface TranscribeResponse {
 export interface TranscriptHandleResponse {
   assistantReply: string;
   unDetected: boolean;
+  unseiDetected: boolean;
+}
+
+export interface FortuneResponse {
+  message: string;
 }

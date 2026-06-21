@@ -3,8 +3,9 @@
 // 実行環境: Deno(Supabase Edge Functions)
 // 役割:
 //  1. Deepgramの確定テキストを受け取る
-//  2. 「うん」(音読み「ウン」となる「運」「雲」を含む単語も含む)を
-//     含むかどうかを判定し、含む場合はeventsテーブルに記録する
+//  2. 「うん」(音読み「ウン」となる「運」「雲」を含む単語も含む)、
+//     および「うんせい」(運勢)を含むかどうかを判定し、
+//     「うん」を含む場合はeventsテーブルに記録する
 //  3. ユーザー発言をmessagesテーブルに保存する
 //  4. 会話の性格(system)と履歴を取得し、ChatGPT(OpenAI API)に送信する
 //  5. アシスタントの返答をmessagesテーブルに保存し、クライアントに返す
@@ -32,6 +33,10 @@ function containsUn(transcript: string): boolean {
   if (new RegExp(`[${KANJI}]雲|雲[${KANJI}]`).test(transcript)) return true;
 
   return false;
+}
+
+function containsUnsei(transcript: string): boolean {
+  return transcript.includes('うんせい') || transcript.includes('運勢');
 }
 
 const corsHeaders = {
@@ -71,7 +76,8 @@ Deno.serve(async (req: Request) => {
 
   // rawTranscript（smart_format なし）で検出することで漢字変換との衝突を防ぐ
   const unDetected = containsUn(rawTranscript ?? transcript);
-  console.log(`${TAG} 4. 「うん」判定: ${unDetected}`);
+  const unseiDetected = containsUnsei(rawTranscript ?? transcript);
+  console.log(`${TAG} 4. 「うん」判定: ${unDetected} / 「うんせい」判定: ${unseiDetected}`);
   if (unDetected) {
     const { error: evError } = await supabase.from('events').insert({
       conversation_id: conversationId,
@@ -162,7 +168,7 @@ Deno.serve(async (req: Request) => {
   }
 
   console.log(`${TAG} 11. 正常終了`);
-  return new Response(JSON.stringify({ assistantReply, unDetected }), {
+  return new Response(JSON.stringify({ assistantReply, unDetected, unseiDetected }), {
     headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
 });
