@@ -117,7 +117,7 @@ export default function App() {
     Speech.speak(data.message, { language: 'ja', onDone: releaseSpeak, onError: releaseSpeak });
   }, [addMessage, releaseSpeak]);
 
-  const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(
+  const { conversationId, personalityName, callError, startConversation: _start, stopConversation: _stop } = useConversation(
     handleAssistantReply,
     handleUserTranscript,
     handleUnDetected,
@@ -228,6 +228,9 @@ export default function App() {
           {callError && (
             <Text style={styles.errorText}>{callError}</Text>
           )}
+          {conversationId && personalityName && (
+            <Text style={styles.personalityName}>{personalityName}</Text>
+          )}
           {conversationId && (
             <Text style={styles.recordingIndicator}>● 録音中</Text>
           )}
@@ -297,6 +300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  personalityName: { color: '#555', fontSize: 13, fontWeight: 'bold' },
   recordingIndicator: { color: '#e53935', fontSize: 13 },
   errorText: { color: '#e53935', fontSize: 12, textAlign: 'center' },
 });
