@@ -30,7 +30,7 @@ export async function notifyUnDetected() {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'うんチェッカー',
-      body: '「うん」を検出しました。',
+      body: "💩",//'「うん」を検出しました。',
     },
     trigger: null,
   });
