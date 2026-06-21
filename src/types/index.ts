@@ -13,6 +13,7 @@ export interface Message {
 export interface ConversationStartResponse {
   conversationId: string;
   personalityName: string;
+  personalityImage: string;
 }
 
 export interface TranscribeResponse {

@@ -1,6 +1,6 @@
 // App.tsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Button, FlatList } from 'react-native';
+import { Image, StyleSheet, Text, View, Button, FlatList } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@supabase/supabase-js';
 import * as Speech from 'expo-speech';
@@ -15,13 +15,14 @@ import { CountdownEffectText } from './src/components/CountdownEffectText';
 import { setupNotifications, notifyUnDetected } from './src/services/notifications';
 import { getCurrentCloudCover } from './src/services/weather';
 import { getFortuneLevel } from './src/utils/fortune';
+import { getPersonalityImage } from './src/constants/personalityImages';
 import type { FortuneResponse, Message } from './src/types';
 
 type UnEffect = 'crumble' | 'explode' | 'car' | 'countdown';
 const UN_EFFECTS: UnEffect[] = ['crumble', 'explode', 'car', 'countdown'];
 
 type LocalMessage =
-  | (Message & { effect?: UnEffect })
+  | (Message & { effect?: UnEffect; personalityImage?: string })
   | { id: string; role: 'system'; content: string; created_at: string; conversation_id: string };
 
 function makeSystemMsg(content: string): LocalMessage {
@@ -77,6 +78,9 @@ export default function App() {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
+  // 現在の会話の性格画像キー（クロージャの陳腐化を避けるためrefで保持）
+  const personalityImageRef = useRef<string | null>(null);
+
   // 読み上げが複数重なっても全て終わるまでミュートを維持するカウンタ
   const speechCountRef = useRef(0);
   // personalityName は useConversation から来るが callback 内で参照するため ref で保持
@@ -90,7 +94,14 @@ export default function App() {
   }, []);
 
   const handleAssistantReply = useCallback((reply: string) => {
-    addMessage({ id: Date.now().toString() + '_a', role: 'assistant', content: reply, created_at: new Date().toISOString(), conversation_id: '' });
+    addMessage({
+      id: Date.now().toString() + '_a',
+      role: 'assistant',
+      content: reply,
+      created_at: new Date().toISOString(),
+      conversation_id: '',
+      personalityImage: personalityImageRef.current ?? undefined,
+    });
     muteAudio();
     speechCountRef.current += 1;
     const sp = SPEECH_PARAMS[personalityNameRef.current ?? ''] ?? DEFAULT_SPEECH_PARAMS;
@@ -138,12 +149,13 @@ export default function App() {
       content: `【今日の運勢: ${fortuneLevel}】${data.message}`,
       created_at: new Date().toISOString(),
       conversation_id: '',
+      personalityImage: personalityImageRef.current ?? undefined,
     });
     const sp = SPEECH_PARAMS[personalityNameRef.current ?? ''] ?? DEFAULT_SPEECH_PARAMS;
     Speech.speak(data.message, { language: 'ja', pitch: sp.pitch, rate: sp.rate, onDone: releaseSpeak, onError: releaseSpeak });
   }, [addMessage, releaseSpeak]);
 
-  const { conversationId, personalityName, callError, startConversation: _start, stopConversation: _stop } = useConversation(
+  const { conversationId, personalityName, personalityImage, callError, startConversation: _start, stopConversation: _stop } = useConversation(
     handleAssistantReply,
     handleUserTranscript,
     handleUnDetected,
@@ -151,8 +163,9 @@ export default function App() {
   );
 
   useEffect(() => {
-    personalityNameRef.current = personalityName;
-  }, [personalityName]);
+    personalityImageRef.current = personalityImage;
+  }, [personalityImage]);
+
 
   const startConversation = useCallback(async () => {
     addMessage(makeSystemMsg('── 会話を開始しました ──'));
@@ -225,9 +238,18 @@ export default function App() {
                   item.role === 'user' ? styles.userBubble : styles.assistantBubble,
                 ]}
               >
-                <Text style={styles.roleLabel}>
-                  {item.role === 'user' ? 'あなた' : 'AI'}
-                </Text>
+                <View style={styles.bubbleHeader}>
+                  {item.role === 'assistant' && 'personalityImage' in item && getPersonalityImage(item.personalityImage) && (
+                    <Image
+                      source={getPersonalityImage(item.personalityImage)!}
+                      style={styles.avatar}
+                      resizeMode="cover"
+                    />
+                  )}
+                  <Text style={styles.roleLabel}>
+                    {item.role === 'user' ? 'あなた' : 'AI'}
+                  </Text>
+                </View>
                 {'effect' in item && item.effect === 'crumble' && (
                   <SandCrumbleText text={item.content} trigger style={styles.messageText} />
                 )}
@@ -308,7 +330,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  roleLabel: { fontSize: 11, color: '#888', marginBottom: 2 },
+  bubbleHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  avatar: { width: 24, height: 24, borderRadius: 4, marginRight: 6 },
+  roleLabel: { fontSize: 11, color: '#888' },
   messageText: { fontSize: 15 },
   systemLog: {
     textAlign: 'center',
