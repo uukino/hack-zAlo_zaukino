@@ -51,15 +51,26 @@ export default function App() {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
+  // 読み上げが複数重なっても全て終わるまでミュートを維持するカウンタ
+  const speechCountRef = useRef(0);
+  const releaseSpeak = useCallback(() => {
+    speechCountRef.current -= 1;
+    if (speechCountRef.current <= 0) {
+      speechCountRef.current = 0;
+      unmuteAudio();
+    }
+  }, []);
+
   const handleAssistantReply = useCallback((reply: string) => {
     addMessage({ id: Date.now().toString() + '_a', role: 'assistant', content: reply, created_at: new Date().toISOString(), conversation_id: '' });
     muteAudio();
+    speechCountRef.current += 1;
     Speech.speak(reply, {
       language: 'ja',
-      onDone: unmuteAudio,
-      onError: unmuteAudio,
+      onDone: releaseSpeak,
+      onError: releaseSpeak,
     });
-  }, [addMessage]);
+  }, [addMessage, releaseSpeak]);
 
   const handleUserTranscript = useCallback((transcript: string, id: string) => {
     addMessage({ id, role: 'user', content: transcript, created_at: new Date().toISOString(), conversation_id: '' });
@@ -76,9 +87,13 @@ export default function App() {
   }, [triggerCarCross]);
 
   const handleUnseiDetected = useCallback(async () => {
+    muteAudio();
+    speechCountRef.current += 1; // 非同期処理中も他の読み上げが先に終わってもミュートを維持
+
     const cloudCover = await getCurrentCloudCover();
     if (cloudCover === null) {
       addMessage(makeSystemMsg('── 運勢の判定に失敗しました（位置情報を取得できません）──'));
+      releaseSpeak();
       return;
     }
 
@@ -88,6 +103,7 @@ export default function App() {
     });
     if (error || !data?.message) {
       addMessage(makeSystemMsg('── 運勢メッセージの取得に失敗しました ──'));
+      releaseSpeak();
       return;
     }
 
@@ -98,9 +114,8 @@ export default function App() {
       created_at: new Date().toISOString(),
       conversation_id: '',
     });
-    muteAudio();
-    Speech.speak(data.message, { language: 'ja', onDone: unmuteAudio, onError: unmuteAudio });
-  }, [addMessage]);
+    Speech.speak(data.message, { language: 'ja', onDone: releaseSpeak, onError: releaseSpeak });
+  }, [addMessage, releaseSpeak]);
 
   const { conversationId, callError, startConversation: _start, stopConversation: _stop } = useConversation(
     handleAssistantReply,
