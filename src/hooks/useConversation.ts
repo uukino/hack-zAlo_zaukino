@@ -27,6 +27,7 @@ export function useConversation(
   onUnseiDetected?: () => void,
 ) {
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [personalityName, setPersonalityName] = useState<string | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
 
@@ -78,6 +79,7 @@ export function useConversation(
     }
 
     setConversationId(data.conversationId);
+    setPersonalityName(data.personalityName);
     conversationIdRef.current = data.conversationId;
 
     initAudio();
@@ -96,6 +98,7 @@ export function useConversation(
     stopAudio();
     conversationIdRef.current = null;
     setConversationId(null);
+    setPersonalityName(null);
     setCallError(null);
   }, []);
 
@@ -106,5 +109,5 @@ export function useConversation(
     };
   }, []);
 
-  return { conversationId, callError, startConversation, stopConversation };
+  return { conversationId, personalityName, callError, startConversation, stopConversation };
 }
