@@ -9,12 +9,15 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "会話機能のためにマイクへのアクセスが必要です"
+        "NSMicrophoneUsageDescription": "会話機能のためにマイクへのアクセスが必要です",
+        "NSLocationWhenInUseUsageDescription": "運勢判定のために現在地の雲量を取得します"
       }
     },
     "android": {
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -28,7 +31,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "運勢判定のために現在地の雲量を取得します"
+        }
+      ]
     ],
     "extra": {
       "eas": {
