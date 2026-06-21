@@ -12,6 +12,7 @@ export interface Message {
 
 export interface ConversationStartResponse {
   conversationId: string;
+  personalityName: string;
 }
 
 export interface TranscribeResponse {
