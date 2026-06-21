@@ -203,7 +203,7 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         {/* ヘッダー */}
         <View style={styles.header}>
-          <Text style={styles.title}>AI会話</Text>
+          <Text style={styles.title}>運チャット</Text>
           <Button title="ログアウト" onPress={handleLogout} />
         </View>
 
