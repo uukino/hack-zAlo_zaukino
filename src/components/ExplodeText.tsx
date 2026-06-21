@@ -1,8 +1,8 @@
 // src/components/ExplodeText.tsx
 // trigger が true になると、文字を粒子に分解して放射状に爆発させ、
 // 空気抵抗で減速しながら飛び散らせて消すテキスト表示
-import React from 'react';
-import { TextStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { TextStyle, Vibration } from 'react-native';
 import { ParticlePhysics, ParticleText } from './ParticleText';
 
 interface ExplodeTextProps {
@@ -30,6 +30,15 @@ const EXPLODE_PHYSICS: ParticlePhysics = {
 };
 
 export function ExplodeText({ text, trigger, style, onComplete }: ExplodeTextProps) {
+  const hasVibrated = useRef(false);
+
+  useEffect(() => {
+    if (trigger && !hasVibrated.current) {
+      hasVibrated.current = true;
+      Vibration.vibrate(300);
+    }
+  }, [trigger]);
+
   return (
     <ParticleText text={text} trigger={trigger} style={style} physics={EXPLODE_PHYSICS} onComplete={onComplete} />
   );
