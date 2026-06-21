@@ -127,8 +127,14 @@ Deno.serve(async (req: Request) => {
   }
   console.log(`${TAG} 7. messages SELECT 成功: ${history.length} 件`);
 
+  const CONVERSATION_INSTRUCTION =
+    'あなたは今、ユーザーと音声で会話しています。' +
+    '必ず日本語で返答してください。' +
+    '返答は2〜3文の短さに収め、最後に必ず相手に問いかけや話を振る一言を添えて会話を続けてください。' +
+    '説明的な長文や箇条書きは避け、テンポよく話しかけるような口語表現を使ってください。';
+
   const groqMessages = [
-    { role: 'system', content: conversation.personality },
+    { role: 'system', content: `${CONVERSATION_INSTRUCTION}\n\n${conversation.personality}` },
     ...history.map((m) => ({ role: m.role, content: m.content })),
   ];
 
