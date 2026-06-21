@@ -28,6 +28,7 @@ export function useConversation(
 ) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [personalityName, setPersonalityName] = useState<string | null>(null);
+  const [personalityImage, setPersonalityImage] = useState<string | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
 
@@ -80,6 +81,7 @@ export function useConversation(
 
     setConversationId(data.conversationId);
     setPersonalityName(data.personalityName);
+    setPersonalityImage(data.personalityImage);
     conversationIdRef.current = data.conversationId;
 
     initAudio();
@@ -99,6 +101,7 @@ export function useConversation(
     conversationIdRef.current = null;
     setConversationId(null);
     setPersonalityName(null);
+    setPersonalityImage(null);
     setCallError(null);
   }, []);
 
@@ -109,5 +112,5 @@ export function useConversation(
     };
   }, []);
 
-  return { conversationId, personalityName, callError, startConversation, stopConversation };
+  return { conversationId, personalityName, personalityImage, callError, startConversation, stopConversation };
 }
